@@ -93,6 +93,7 @@ class FakeSheetsAPI(HTTPClient):
         self.title = title
         self.sheets = []
         self.calls = []
+        self.batch_updates = []
         for sheet_title, rows in (tabs or {}).items():
             self.add_sheet(sheet_title, rows)
 
@@ -196,6 +197,7 @@ class FakeSheetsAPI(HTTPClient):
 
     def batch_update(self, id, body):
         self.calls.append("batch_update")
+        self.batch_updates.append(copy.deepcopy(body))
         self._check_id(id)
         with self._atomic():
             for request in body["requests"]:
