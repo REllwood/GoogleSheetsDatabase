@@ -1,48 +1,27 @@
-HEADER_ROW = 1
+from .sheet_table import open_table
 
 
-def execute_delete(query, sheet):
+def execute_delete(statement, sheet):
     """
-     Executes a DELETE query on the provided Google Sheet.
+    Executes a DELETE statement on the provided Google Sheet.
 
-     Args:
-     - query (str): The SQL-like DELETE query to execute.
-     - sheet (gspread.Spreadsheet): The Google Sheet instance.
+    Args:
+    - statement (query_parser.Delete): The parsed DELETE statement.
+    - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
-     Returns:
-     - str: Indicates the status of the deletion operation. Returns "Deletion successful"
-       upon successful execution. If the DELETE query is missing a WHERE clause, it returns
-       "DELETE query requires a WHERE clause".
-
-     Raises:
-     - Exception: If an error occurs during the execution of the DELETE query.
-     """
+    Returns:
+    - str: "Deletion successful". If the DELETE query is missing a WHERE clause, it returns
+      "DELETE query requires a WHERE clause". On failure, a description of the error.
+    """
     try:
-        parts = query.split(' ')
-        sheet_name = parts[2]
-        where_index = query.find('WHERE')
-
-        if where_index != -1:
-            where_clause = query[where_index + len('WHERE'):].strip()
-            where_parts = where_clause.split('=')
-            where_column = where_parts[0].strip()
-            where_value = where_parts[1].strip().strip("'")
-
-            worksheet = sheet.worksheet(sheet_name)
-            column = worksheet.find(where_column, in_row=HEADER_ROW)
-            if column is None:
-                raise ValueError(f"Column {where_column} not found")
-
-            matching_rows = [
-                cell.row
-                for cell in worksheet.findall(where_value, in_column=column.col)
-                if cell.row > HEADER_ROW
-            ]
-            delete_rows_bottom_up(worksheet, matching_rows)
-
-            return "Deletion successful"
-        else:
+        if statement.where is None:
             return "DELETE query requires a WHERE clause"
+
+        table = open_table(sheet, statement.table)
+        matching_rows = [row_number for row_number, _ in table.matching_rows(statement.where)]
+        delete_rows_bottom_up(table.worksheet, matching_rows)
+
+        return "Deletion successful"
     except Exception as e:
         return f"Error executing DELETE: {str(e)}"
 

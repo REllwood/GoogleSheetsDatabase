@@ -1,41 +1,37 @@
-def execute_update(query, sheet):
+from gspread.utils import ValueInputOption, rowcol_to_a1
+
+from .sheet_table import open_table
+
+
+def execute_update(statement, sheet):
     """
-    Executes an UPDATE query on the provided Google Sheet.
+    Executes an UPDATE statement on the provided Google Sheet.
+
+    The sheet is read once, and every changed cell is written in a single request.
 
     Args:
-    - query (str): The SQL-like UPDATE query to execute.
+    - statement (query_parser.Update): The parsed UPDATE statement.
     - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
     Returns:
-    - str: Indicates the status of the update operation. Returns "Update successful"
-      upon successful execution.
-
-    Raises:
-    - Exception: If an error occurs during the execution of the UPDATE query.
+    - str: "Update successful". If the UPDATE query is missing a WHERE clause, it returns
+      "UPDATE query requires a WHERE clause". On failure, a description of the error.
     """
     try:
-        parts = query.split(' ')
-        sheet_name = parts[1]
-        set_index = query.find('SET')
-        where_index = query.find('WHERE')
+        if statement.where is None:
+            return "UPDATE query requires a WHERE clause"
 
-        set_clause = query[set_index + len('SET'): where_index].strip()
-        where_clause = query[where_index + len('WHERE'):].strip()
+        table = open_table(sheet, statement.table)
+        indexes = table.column_indexes([column for column, _ in statement.assignments])
+        values = ["" if value is None else value for _, value in statement.assignments]
 
-        set_parts = set_clause.split('=')
-        set_column = set_parts[0].strip()
-        set_value = set_parts[1].strip().strip("'")
-
-        where_parts = where_clause.split('=')
-        where_column = where_parts[0].strip()
-        where_value = where_parts[1].strip().strip("'")
-
-        worksheet = sheet.worksheet(sheet_name)
-        cell_list = worksheet.findall(where_value)
-
-        for cell in cell_list:
-            if cell.col == worksheet.find(where_column).col:
-                worksheet.update_cell(cell.row, worksheet.find(set_column).col, set_value)
+        changes = [
+            {"range": rowcol_to_a1(row_number, index + 1), "values": [[value]]}
+            for row_number, _ in table.matching_rows(statement.where)
+            for index, value in zip(indexes, values)
+        ]
+        if changes:
+            table.worksheet.batch_update(changes, value_input_option=ValueInputOption.raw)
 
         return "Update successful"
     except Exception as e:
