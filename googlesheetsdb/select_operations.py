@@ -1,24 +1,22 @@
-def execute_select(query, sheet):
+from .sheet_table import open_table
+
+
+def execute_select(statement, sheet):
     """
-    Executes a SELECT query on the provided Google Sheet.
+    Executes a SELECT statement on the provided Google Sheet.
 
     Args:
-    - query (str): The SQL-like SELECT query to execute.
+    - statement (query_parser.Select): The parsed SELECT statement.
     - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
     Returns:
-    - list: A list of dictionaries representing records retrieved from the specified sheet.
-      Each dictionary corresponds to a row in the sheet where keys are column headers and
-      values are cell values.
-
-    Raises:
-    - Exception: If an error occurs during the execution of the SELECT query.
+    - list: A dictionary per matching row, keyed by column name. SELECT * gives every
+      named column in sheet order; otherwise the listed columns, in the order listed.
+      On failure, a string describing the error.
     """
     try:
-        parts = query.split(' ')
-        sheet_name = parts[3]
-        worksheet = sheet.worksheet(sheet_name)
-        records = worksheet.get_all_records()
-        return records
+        table = open_table(sheet, statement.table)
+        indexes = None if statement.columns is None else table.column_indexes(statement.columns)
+        return [table.record(row, indexes) for _, row in table.matching_rows(statement.where)]
     except Exception as e:
         return f"Error executing SELECT: {str(e)}"

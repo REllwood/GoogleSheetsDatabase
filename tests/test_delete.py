@@ -64,7 +64,7 @@ def test_unknown_column_is_an_error(make_db):
     db, api = make_db(teams(("A", "RED")))
 
     assert db.execute_query("DELETE FROM SHEET1 WHERE COLOUR = 'RED'") == (
-        "Error executing DELETE: Column COLOUR not found"
+        "Error executing DELETE: 'SHEET1' has no column 'COLOUR'. Columns: 'NAME', 'TEAM'"
     )
     assert len(api.values("SHEET1")) == 2
 

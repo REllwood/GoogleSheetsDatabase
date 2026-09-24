@@ -1,10 +1,12 @@
 import google.auth
 import gspread
 from gspread.auth import DEFAULT_AUTHORIZED_USER_FILENAME, DEFAULT_CREDENTIALS_FILENAME
-from .select_operations import execute_select
-from .insert_operations import execute_insert
-from .update_operations import execute_update
 from .delete_operations import execute_delete
+from .errors import QueryError
+from .insert_operations import execute_insert
+from .query_parser import Delete, Insert, Select, Update, parse
+from .select_operations import execute_select
+from .update_operations import execute_update
 
 # Read/write access to Google Sheets only; the library never touches Google Drive.
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -64,16 +66,31 @@ class GoogleSheetDB:
         )
         return cls(spreadsheet_id, client=client)
 
-    def execute_query(self, query):
-        query = query.upper()
+    def execute_query(self, query, params=()):
+        """
+        Runs one SQL-like query against the spreadsheet.
 
-        if query.startswith("SELECT"):
-            return execute_select(query, self.sheet)
-        elif query.startswith("INSERT"):
-            return execute_insert(query, self.sheet)
-        elif query.startswith("UPDATE"):
-            return execute_update(query, self.sheet)
-        elif query.startswith("DELETE"):
-            return execute_delete(query, self.sheet)
-        else:
-            return "Unsupported operation"
+        Args:
+        - query (str): A SELECT, INSERT, UPDATE or DELETE query. Table names are worksheet
+          (tab) names; column names come from each worksheet's first row.
+        - params (list or tuple, optional): Values for the query's ? placeholders, in order.
+          Use these for any value that comes from outside your code.
+
+        Returns:
+        - list: For SELECT, a dictionary per matching row.
+        - str: For other queries, a status message. If the query fails, a string
+          describing the error.
+        """
+        try:
+            statement = parse(query, params)
+        except QueryError as e:
+            return f"Error parsing query: {str(e)}"
+
+        if isinstance(statement, Select):
+            return execute_select(statement, self.sheet)
+        elif isinstance(statement, Insert):
+            return execute_insert(statement, self.sheet)
+        elif isinstance(statement, Update):
+            return execute_update(statement, self.sheet)
+        elif isinstance(statement, Delete):
+            return execute_delete(statement, self.sheet)
