@@ -3,8 +3,16 @@ Reads a worksheet as a database table and evaluates WHERE conditions against its
 
 A table is one worksheet (tab). Row 1 holds the column names; every row below it is a
 record. Completely empty rows are skipped.
+
+Cells are read as their underlying values rather than as displayed: numbers come back as
+int or float (so 50% is 0.5), checkboxes and TRUE/FALSE as bool, text as str exactly as
+stored (so a postcode such as '0800' keeps its leading zero), and blank cells as None.
+Dates and times come back as text, formatted as they are in the sheet.
 """
-from gspread.utils import numericise_all
+import math
+import re
+
+from gspread.utils import DateTimeOption, ValueRenderOption
 
 from .errors import ColumnNotFoundError, QueryError, TableNotFoundError
 from .query_parser import And, Comparison, IsNull, Not, Or
@@ -108,8 +116,7 @@ class Table:
         """Turns a row into a {column name: value} dict, for the given column indexes."""
         if indexes is None:
             indexes = self.named_columns
-        values = numericise_all([row[i] for i in indexes])
-        return {self.header[i]: value for i, value in zip(indexes, values)}
+        return {self.header[i]: None if _is_blank(row[i]) else row[i] for i in indexes}
 
     def _compile(self, condition):
         """Turns a parsed condition into a function of a row, resolving columns once."""
@@ -132,11 +139,28 @@ class Table:
 
 
 def _read_values(worksheet):
-    return worksheet.get_values()
+    values = worksheet.get_values(
+        value_render_option=ValueRenderOption.unformatted,
+        date_time_render_option=DateTimeOption.formatted_string,
+    )
+    return [[_whole_number_as_int(v) for v in row] for row in values]
+
+
+def _whole_number_as_int(value):
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
 
 
 def _header_name(value):
-    return str(value).strip()
+    return _as_text(value).strip()
+
+
+def _as_text(value):
+    """Writes a value the way the sheet displays it by default."""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    return str(value)
 
 
 def _fold(name):
@@ -175,21 +199,39 @@ def _compare(cell, operator, value):
     }[operator]
 
 
+_NUMBER_TEXT = re.compile(r"-?(0|[1-9][0-9]*)(\.[0-9]+)?")
+
+
 def _order(cell, value):
-    """Returns -1, 0 or 1 as the cell is less than, equal to or greater than the value,
-    or None when they can't be compared."""
+    """
+    Returns -1, 0 or 1 as the cell is less than, equal to or greater than the value, or
+    None when they can't be compared.
+
+    Values of the same type compare naturally: numbers numerically, text by character
+    (case-sensitive), TRUE/FALSE with each other. Text and numbers compare only when the
+    text is written exactly like a number, such as '38' or '-2.5'; text such as '0800' or
+    '1e3' never equals a number.
+    """
     if _is_blank(cell):
         return None
-    if isinstance(value, bool):
-        text = str(cell).strip().upper()
-        if text not in ("TRUE", "FALSE"):
+    if isinstance(cell, bool) or isinstance(value, bool):
+        if not (isinstance(cell, bool) and isinstance(value, bool)):
             return None
-        cell = text == "TRUE"
-    elif isinstance(value, (int, float)):
-        try:
-            cell = float(str(cell).strip())
-        except ValueError:
-            return None
-    else:
-        cell = str(cell)
+    elif isinstance(cell, str) and not isinstance(value, str):
+        cell = _number_from_text(cell)
+    elif isinstance(value, str) and not isinstance(cell, str):
+        value = _number_from_text(value)
+    if cell is None or value is None:
+        return None
     return (cell > value) - (cell < value)
+
+
+def _number_from_text(text):
+    """The number that `text` spells out exactly, such as 38 for '38', otherwise None."""
+    text = text.strip()
+    if not _NUMBER_TEXT.fullmatch(text):
+        return None
+    number = float(text)
+    if not math.isfinite(number):
+        return None
+    return _whole_number_as_int(number)

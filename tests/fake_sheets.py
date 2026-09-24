@@ -94,6 +94,7 @@ class FakeSheetsAPI(HTTPClient):
         self.sheets = []
         self.calls = []
         self.batch_updates = []
+        self.values_get_params = []
         for sheet_title, rows in (tabs or {}).items():
             self.add_sheet(sheet_title, rows)
 
@@ -140,6 +141,7 @@ class FakeSheetsAPI(HTTPClient):
 
     def values_get(self, id, range, params=None):
         self.calls.append("values_get")
+        self.values_get_params.append(dict(params or {}))
         self._check_id(id)
         sheet, (r1, c1, r2, c2) = self._parse_range(range)
         render = (params or {}).get("valueRenderOption") or "FORMATTED_VALUE"
