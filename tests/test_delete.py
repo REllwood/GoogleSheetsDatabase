@@ -1,7 +1,7 @@
 """DELETE must remove exactly the matching rows, however many there are."""
 import pytest
 
-from delete_operations import _contiguous_runs
+from googlesheetsdb.delete_operations import _contiguous_runs
 
 
 def teams(*rows):

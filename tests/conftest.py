@@ -1,7 +1,7 @@
 import pytest
 
 from fake_sheets import FakeSheetsAPI
-from main_module import GoogleSheetDB
+from googlesheetsdb import GoogleSheetDB
 
 
 @pytest.fixture

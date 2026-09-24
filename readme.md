@@ -7,13 +7,13 @@ A very basic Python library that allows you to interact with Google Sheets as a 
 Great question, when doing very basic development, or running small-scale hobby projects, having the cost of running a DB server can be a bit of a pain. I know there are plenty of free options out there (and these are superior), but I wanted to see if I could use Google Sheets as a database table and here we are. 
 ## Installation
 
-Requires Python 3.10 or newer. Install the required packages using pip:
+Requires Python 3.10 or newer. Install straight from GitHub with pip:
 
 ```bash
-pip install -r requirements.txt
+pip install git+https://github.com/REllwood/GoogleSheetsDatabase.git
 ```
 
-This installs [gspread](https://github.com/burnash/gspread) 6 and [google-auth](https://github.com/googleapis/google-auth-library-python).
+This also installs [gspread](https://github.com/burnash/gspread) 6 and [google-auth](https://github.com/googleapis/google-auth-library-python).
 
 
 ## Usage
@@ -29,7 +29,7 @@ The spreadsheet ID is the long string in your sheet's URL: `https://docs.google.
    - **Share your Google Sheet with the service account's email address** (the `client_email` value in the key file) and give it Editor access. The service account can't open the sheet until you do this.
    - Pass the path to the key file:
      ```python
-     from main_module import GoogleSheetDB
+     from googlesheetsdb import GoogleSheetDB
 
      db = GoogleSheetDB('YOUR_SPREADSHEET_ID', 'path/to/service-account.json')
      ```
@@ -102,7 +102,7 @@ This is a very basic implementation of a database using Google Sheets. It is not
 The tests run against an in-memory fake of the Google Sheets API, so they need no Google account or network access:
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 pytest
 ```
 
