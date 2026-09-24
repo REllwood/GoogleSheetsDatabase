@@ -2,7 +2,6 @@ import google.auth
 import gspread
 from gspread.auth import DEFAULT_AUTHORIZED_USER_FILENAME, DEFAULT_CREDENTIALS_FILENAME
 from .delete_operations import execute_delete
-from .errors import QueryError
 from .insert_operations import execute_insert
 from .query_parser import Delete, Insert, Select, Update, parse
 from .select_operations import execute_select
@@ -77,14 +76,20 @@ class GoogleSheetDB:
           Use these for any value that comes from outside your code.
 
         Returns:
-        - list: For SELECT, a dictionary per matching row.
-        - str: For other queries, a status message. If the query fails, a string
-          describing the error.
+        - list: For SELECT, a dictionary per matching row, keyed by column name.
+        - int: For INSERT, UPDATE and DELETE, the number of rows inserted, updated or
+          deleted.
+
+        Raises:
+        - QuerySyntaxError: If the query can't be parsed, or params don't match its
+          placeholders. Nothing is sent to Google.
+        - TableNotFoundError: If no worksheet has the table's name.
+        - ColumnNotFoundError: If a column isn't in the table's header row.
+        - QueryError: For other problems with the query, such as an UPDATE or DELETE
+          without a WHERE clause. QueryError is the base class of all of the above.
+        - gspread.exceptions.APIError: If Google rejects the request.
         """
-        try:
-            statement = parse(query, params)
-        except QueryError as e:
-            return f"Error parsing query: {str(e)}"
+        statement = parse(query, params)
 
         if isinstance(statement, Select):
             return execute_select(statement, self.sheet)

@@ -3,6 +3,5 @@ keeps working when run from a checkout of this repository.
 
 New code should use `from googlesheetsdb import GoogleSheetDB`.
 """
-from googlesheetsdb import SCOPES, GoogleSheetDB
-
-__all__ = ["GoogleSheetDB", "SCOPES"]
+from googlesheetsdb import *  # noqa: F401,F403
+from googlesheetsdb import __all__  # noqa: F401

@@ -12,11 +12,12 @@ def execute_select(statement, sheet):
     Returns:
     - list: A dictionary per matching row, keyed by column name. SELECT * gives every
       named column in sheet order; otherwise the listed columns, in the order listed.
-      On failure, a string describing the error.
+
+    Raises:
+    - TableNotFoundError: If no worksheet has the table's name.
+    - ColumnNotFoundError: If a column isn't in the header row.
+    - QueryError: If the header row repeats a column name.
     """
-    try:
-        table = open_table(sheet, statement.table)
-        indexes = None if statement.columns is None else table.column_indexes(statement.columns)
-        return [table.record(row, indexes) for _, row in table.matching_rows(statement.where)]
-    except Exception as e:
-        return f"Error executing SELECT: {str(e)}"
+    table = open_table(sheet, statement.table)
+    indexes = None if statement.columns is None else table.column_indexes(statement.columns)
+    return [table.record(row, indexes) for _, row in table.matching_rows(statement.where)]

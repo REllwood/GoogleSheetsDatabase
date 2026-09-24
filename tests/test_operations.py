@@ -1,6 +1,8 @@
 """Each operation, end to end against the real gspread 6 client and the fake Sheets API."""
 import pytest
 
+from googlesheetsdb import ColumnNotFoundError, QueryError, QuerySyntaxError, TableNotFoundError
+
 
 def hobbits():
     return {"Sheet1": [
@@ -18,9 +20,9 @@ def test_readme_examples_work_as_written(make_db):
     db, api = make_db(hobbits())
 
     assert len(db.execute_query("SELECT * FROM Sheet1")) == 4
-    assert db.execute_query("INSERT INTO Sheet1 (Name, Age) VALUES ('Bilbo', 111)") == "Insertion successful"
-    assert db.execute_query("UPDATE Sheet1 SET Age = 51 WHERE Name = 'Frodo'") == "Update successful"
-    assert db.execute_query("DELETE FROM Sheet1 WHERE Name = 'Pippin'") == "Deletion successful"
+    assert db.execute_query("INSERT INTO Sheet1 (Name, Age) VALUES ('Bilbo', 111)") == 1
+    assert db.execute_query("UPDATE Sheet1 SET Age = 51 WHERE Name = 'Frodo'") == 1
+    assert db.execute_query("DELETE FROM Sheet1 WHERE Name = 'Pippin'") == 1
 
     assert api.values("Sheet1") == [
         ["Name", "Age", "Home"],
@@ -116,18 +118,17 @@ def test_select_reads_the_sheet_once(make_db):
 def test_unknown_table_and_column(make_db):
     db, _ = make_db(hobbits())
 
-    assert db.execute_query("SELECT * FROM Sheet2") == (
-        "Error executing SELECT: No worksheet is named 'Sheet2'. Worksheets: 'Sheet1'"
-    )
-    assert db.execute_query("SELECT Height FROM Sheet1") == (
-        "Error executing SELECT: 'Sheet1' has no column 'Height'. Columns: 'Name', 'Age', 'Home'"
-    )
+    with pytest.raises(TableNotFoundError, match="No worksheet is named 'Sheet2'. Worksheets: 'Sheet1'"):
+        db.execute_query("SELECT * FROM Sheet2")
+    with pytest.raises(ColumnNotFoundError, match="'Sheet1' has no column 'Height'. Columns: 'Name', 'Age', 'Home'"):
+        db.execute_query("SELECT Height FROM Sheet1")
 
 
 def test_duplicate_header_names_are_reported(make_db):
     db, _ = make_db({"Sheet1": [["Name", "Name"], ["a", "b"]]})
 
-    assert "repeats the column name(s) 'Name'" in db.execute_query("SELECT * FROM Sheet1")
+    with pytest.raises(QueryError, match=r"repeats the column name\(s\) 'Name'"):
+        db.execute_query("SELECT * FROM Sheet1")
 
 
 # -- INSERT ---------------------------------------------------------------------
@@ -169,27 +170,25 @@ def test_insert_several_rows_in_one_request(make_db):
 def test_insert_value_count_must_match(make_db):
     db, api = make_db(hobbits())
 
-    assert db.execute_query("INSERT INTO Sheet1 (Name, Age) VALUES ('Bilbo')") == (
-        "Error executing INSERT: Row 1 has 1 value(s) for 2 column(s)"
-    )
-    assert db.execute_query("INSERT INTO Sheet1 VALUES ('Bilbo', 111)") == (
-        "Error executing INSERT: Row 1 has 2 value(s) for 3 column(s)"
-    )
+    with pytest.raises(QueryError, match=r"Row 1 has 1 value\(s\) for 2 column\(s\)"):
+        db.execute_query("INSERT INTO Sheet1 (Name, Age) VALUES ('Bilbo')")
+    with pytest.raises(QueryError, match=r"Row 2 has 2 value\(s\) for 3 column\(s\)"):
+        db.execute_query("INSERT INTO Sheet1 VALUES ('Bilbo', 111, 'Bag End'), ('Bilbo', 111)")
     assert len(api.values("Sheet1")) == 5
 
 
 def test_insert_rejects_a_column_named_twice(make_db):
     db, _ = make_db(hobbits())
 
-    assert db.execute_query("INSERT INTO Sheet1 (Name, name) VALUES ('a', 'b')") == (
-        "Error executing INSERT: Column 'Name' is listed more than once"
-    )
+    with pytest.raises(QueryError, match="Column 'Name' is listed more than once"):
+        db.execute_query("INSERT INTO Sheet1 (Name, name) VALUES ('a', 'b')")
 
 
 def test_insert_into_a_sheet_without_a_header(make_db):
     db, _ = make_db({"Empty": []})
 
-    assert "has no header row" in db.execute_query("INSERT INTO Empty VALUES ('x')")
+    with pytest.raises(ColumnNotFoundError, match="'Empty' has no header row"):
+        db.execute_query("INSERT INTO Empty VALUES ('x')")
 
 
 def test_formulas_are_stored_as_text_not_run(make_db):
@@ -238,7 +237,8 @@ def test_update_where_value_equal_to_a_header_never_touches_the_header(make_db):
 def test_update_without_where_is_refused(make_db):
     db, api = make_db(hobbits())
 
-    assert db.execute_query("UPDATE Sheet1 SET Age = 1") == "UPDATE query requires a WHERE clause"
+    with pytest.raises(QueryError, match="UPDATE needs a WHERE clause"):
+        db.execute_query("UPDATE Sheet1 SET Age = 1")
     assert api.calls == []
 
 
@@ -271,7 +271,8 @@ def test_delete_with_a_compound_condition(make_db):
 def test_delete_without_where_is_refused(make_db):
     db, api = make_db(hobbits())
 
-    assert db.execute_query("DELETE FROM Sheet1") == "DELETE query requires a WHERE clause"
+    with pytest.raises(QueryError, match="DELETE needs a WHERE clause"):
+        db.execute_query("DELETE FROM Sheet1")
     assert api.calls == []
 
 
@@ -298,10 +299,10 @@ def test_parameters_cannot_inject_query_text(make_db):
 def test_syntax_errors_are_reported_before_any_api_call(make_db):
     db, api = make_db(hobbits())
 
-    assert db.execute_query("DROP TABLE Sheet1") == (
-        "Error parsing query: Expected SELECT, INSERT, UPDATE or DELETE, but found 'DROP' at position 1"
-    )
-    assert db.execute_query("  SELECT * FROM Sheet1 WHERE Age > 30 AND") .startswith("Error parsing query: ")
+    with pytest.raises(QuerySyntaxError, match="Expected SELECT, INSERT, UPDATE or DELETE, but found 'DROP'"):
+        db.execute_query("DROP TABLE Sheet1")
+    with pytest.raises(QuerySyntaxError, match="Expected a column name, but found the end of the query"):
+        db.execute_query("  SELECT * FROM Sheet1 WHERE Age > 30 AND")
     assert api.calls == []
 
 
@@ -333,19 +334,34 @@ def test_boolean_cells(make_db, where, names):
 def test_ambiguous_names_must_be_written_exactly(make_db):
     db, _ = make_db({"Data": [["name", "NAME"], ["a", "b"]], "DATA": [["x"]]})
 
-    assert db.execute_query("SELECT * FROM data") == (
-        "Error executing SELECT: More than one worksheet matches 'data'; use its exact name"
-    )
-    assert db.execute_query("SELECT Name FROM Data") == (
-        "Error executing SELECT: More than one column of 'Data' matches 'Name'; use its exact name"
-    )
+    with pytest.raises(TableNotFoundError, match="More than one worksheet matches 'data'; use its exact name"):
+        db.execute_query("SELECT * FROM data")
+    with pytest.raises(ColumnNotFoundError, match="More than one column of 'Data' matches 'Name'"):
+        db.execute_query("SELECT Name FROM Data")
     assert db.execute_query("SELECT NAME FROM Data") == [{"NAME": "b"}]
 
 
 def test_update_unknown_column(make_db):
     db, api = make_db(hobbits())
 
-    assert db.execute_query("UPDATE Sheet1 SET Height = 1 WHERE Name = 'Sam'") == (
-        "Error executing UPDATE: 'Sheet1' has no column 'Height'. Columns: 'Name', 'Age', 'Home'"
-    )
+    with pytest.raises(ColumnNotFoundError, match="'Sheet1' has no column 'Height'"):
+        db.execute_query("UPDATE Sheet1 SET Height = 1 WHERE Name = 'Sam'")
     assert "values_batch_update" not in api.calls
+
+
+# -- results --------------------------------------------------------------------
+
+def test_writes_return_the_number_of_rows_affected(make_db):
+    db, _ = make_db(hobbits())
+
+    assert db.execute_query("INSERT INTO Sheet1 (Name) VALUES ('Lobelia'), ('Lotho'), ('Otho')") == 3
+    assert db.execute_query("UPDATE Sheet1 SET Home = 'Hardbottle' WHERE Name >= 'Lo' AND Name < 'Lp'") == 2
+    assert db.execute_query("UPDATE Sheet1 SET Home = 'Nowhere' WHERE Name = 'Gandalf'") == 0
+    assert db.execute_query("DELETE FROM Sheet1 WHERE Home = 'Hardbottle' OR Name = 'Otho'") == 3
+    assert db.execute_query("DELETE FROM Sheet1 WHERE Name = 'Otho'") == 0
+
+
+def test_select_with_no_matches_returns_an_empty_list(make_db):
+    db, _ = make_db(hobbits())
+
+    assert db.execute_query("SELECT * FROM Sheet1 WHERE Age > 1000") == []
