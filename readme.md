@@ -7,45 +7,53 @@ A very basic Python library that allows you to interact with Google Sheets as a 
 Great question, when doing very basic development, or running small-scale hobby projects, having the cost of running a DB server can be a bit of a pain. I know there are plenty of free options out there (and these are superior), but I wanted to see if I could use Google Sheets as a database table and here we are. 
 ## Installation
 
-Install the required packages using pip:
+Requires Python 3.10 or newer. Install the required packages using pip:
 
 ```bash
-pip install gspread oauth2client
+pip install -r requirements.txt
 ```
+
+This installs [gspread](https://github.com/burnash/gspread) 6 and [google-auth](https://github.com/googleapis/google-auth-library-python).
 
 
 ## Usage
 
 ### Setting Up Authentication
 
-1. **Obtain OAuth2 Credentials:**
-   - Create OAuth2 credentials in the [Google Cloud Console](https://console.cloud.google.com/).
-   - Get the client ID and client secret.
+First, enable the **Google Sheets API** for your project in the [Google Cloud Console](https://console.cloud.google.com/apis/library/sheets.googleapis.com). Then choose one of the following.
 
-2. **initialise GoogleSheetDB with Service Account Credentials (Optional):**
-   - If using a service account, download the service account credentials JSON file.
-   - Import `GoogleSheetDB` from `main_module.py`.
-   - Create an instance of `GoogleSheetDB` by passing your Google Sheet ID and the path to the service account credentials file:
+The spreadsheet ID is the long string in your sheet's URL: `https://docs.google.com/spreadsheets/d/<spreadsheet_id>/edit`.
+
+1. **Service account (best for scripts and servers):**
+   - Create a service account and download its JSON key file.
+   - **Share your Google Sheet with the service account's email address** (the `client_email` value in the key file) and give it Editor access. The service account can't open the sheet until you do this.
+   - Pass the path to the key file:
      ```python
      from main_module import GoogleSheetDB
 
-     spreadsheet_id = 'YOUR_SPREADSHEET_ID'
-     credentials_file = 'path/to/your/credentials.json'  # Path to your serviceaccount credentials file
-     db = GoogleSheetDB(spreadsheet_id, credentials_file)
+     db = GoogleSheetDB('YOUR_SPREADSHEET_ID', 'path/to/service-account.json')
      ```
 
-3. **initialise GoogleSheetDB with Default Credentials:**
-   - If not using a service account, you can initialise `GoogleSheetDB` without providing a credentials file. This will attempt to use the application default credentials:
+2. **Your own Google account (OAuth):**
+   - Create an OAuth client ID of type *Desktop app* and download its JSON file.
+   - Use `from_oauth`. The first run opens your browser so you can sign in and grant access; the token is then saved (by default to `~/.config/gspread/authorized_user.json`) and reused:
      ```python
-     db = GoogleSheetDB('YOUR_SPREADSHEET_ID')  # Initialises GoogleSheetDB using default credentials
+     db = GoogleSheetDB.from_oauth('YOUR_SPREADSHEET_ID', 'path/to/client_secret.json')
      ```
 
-4. **Authenticate User (if using default credentials):**
-   - Use the `authenticate` method to initiate the OAuth2 flow if you are using default credentials:
+3. **Application Default Credentials:**
+   - Leave out the key file:
      ```python
-     db.authenticate()
+     db = GoogleSheetDB('YOUR_SPREADSHEET_ID')
      ```
-   - Follow the prompts to authorize access and enter the obtained authorization code.
+   - On Google Cloud (Cloud Run, Compute Engine and so on) this uses the attached service account; share the sheet with it as in option 1.
+   - On your own machine, sign in with the Sheets scope first:
+     ```bash
+     gcloud auth application-default login --scopes=https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/cloud-platform
+     ```
+     If Google then says the Sheets API needs a quota project, run `gcloud auth application-default set-quota-project YOUR_PROJECT_ID`.
+
+Keep key and token files out of git. The included `.gitignore` covers the usual file names.
 
 ### Performing Operations
 
@@ -89,6 +97,15 @@ This is a very basic implementation of a database using Google Sheets. It is not
   - Allow users to specify multiple header rows and columns.
   - Flexibility to specify the header row and column by index, name, regex, or a combination of values, regex, names, and indices.
   
+## Running the Tests
+
+The tests run against an in-memory fake of the Google Sheets API, so they need no Google account or network access:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
 ## Contributing
 Contributions are welcome! Feel free to open issues or submit pull requests for improvements, bug fixes, or additional features.
 

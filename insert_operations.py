@@ -1,6 +1,3 @@
-import gspread
-
-
 def execute_insert(query, sheet):
     """
     Executes an INSERT query on the provided Google Sheet.

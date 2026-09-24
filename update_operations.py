@@ -1,6 +1,3 @@
-import gspread
-
-
 def execute_update(query, sheet):
     """
     Executes an UPDATE query on the provided Google Sheet.
