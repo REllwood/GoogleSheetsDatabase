@@ -2,9 +2,9 @@ import google.auth
 import gspread
 import pytest
 
-import main_module
+import googlesheetsdb.database as database
 from fake_sheets import FakeSheetsAPI
-from main_module import SCOPES, GoogleSheetDB
+from googlesheetsdb import SCOPES, GoogleSheetDB
 
 
 @pytest.fixture
@@ -99,4 +99,4 @@ def test_unknown_spreadsheet_raises(api):
 
 
 def test_scope_is_sheets_only():
-    assert main_module.SCOPES == ["https://www.googleapis.com/auth/spreadsheets"]
+    assert database.SCOPES == ["https://www.googleapis.com/auth/spreadsheets"]
