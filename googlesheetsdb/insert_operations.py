@@ -18,33 +18,35 @@ def execute_insert(statement, sheet):
     - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
     Returns:
-    - str: "Insertion successful", or a description of the error.
+    - int: The number of rows inserted.
+
+    Raises:
+    - TableNotFoundError: If no worksheet has the table's name.
+    - ColumnNotFoundError: If a column isn't in the header row, or there is no header row.
+    - QueryError: If a row has the wrong number of values, or a column is listed twice.
     """
-    try:
-        table = open_table(sheet, statement.table)
-        table.require_header()
-        if statement.columns is None:
-            indexes = table.named_columns
-        else:
-            indexes = table.column_indexes(statement.columns)
+    table = open_table(sheet, statement.table)
+    table.require_header()
+    if statement.columns is None:
+        indexes = table.named_columns
+    else:
+        indexes = table.column_indexes(statement.columns)
 
-        new_rows = []
-        for number, values in enumerate(statement.rows, start=1):
-            if len(values) != len(indexes):
-                raise QueryError(
-                    f"Row {number} has {len(values)} value(s) for {len(indexes)} column(s)"
-                )
-            row = [""] * table.width
-            for index, value in zip(indexes, values):
-                row[index] = "" if value is None else value
-            new_rows.append(row)
+    new_rows = []
+    for number, values in enumerate(statement.rows, start=1):
+        if len(values) != len(indexes):
+            raise QueryError(
+                f"Row {number} has {len(values)} value(s) for {len(indexes)} column(s)"
+            )
+        row = [""] * table.width
+        for index, value in zip(indexes, values):
+            row[index] = "" if value is None else value
+        new_rows.append(row)
 
-        table.worksheet.append_rows(
-            new_rows,
-            value_input_option=ValueInputOption.raw,
-            insert_data_option=InsertDataOption.insert_rows,
-            table_range="A1",
-        )
-        return "Insertion successful"
-    except Exception as e:
-        return f"Error executing INSERT: {str(e)}"
+    table.worksheet.append_rows(
+        new_rows,
+        value_input_option=ValueInputOption.raw,
+        insert_data_option=InsertDataOption.insert_rows,
+        table_range="A1",
+    )
+    return len(new_rows)

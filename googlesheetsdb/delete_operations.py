@@ -1,3 +1,4 @@
+from .errors import QueryError
 from .sheet_table import open_table
 
 
@@ -10,20 +11,21 @@ def execute_delete(statement, sheet):
     - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
     Returns:
-    - str: "Deletion successful". If the DELETE query is missing a WHERE clause, it returns
-      "DELETE query requires a WHERE clause". On failure, a description of the error.
+    - int: The number of rows deleted.
+
+    Raises:
+    - QueryError: If the query has no WHERE clause.
+    - TableNotFoundError: If no worksheet has the table's name.
+    - ColumnNotFoundError: If a column isn't in the header row.
     """
-    try:
-        if statement.where is None:
-            return "DELETE query requires a WHERE clause"
+    if statement.where is None:
+        raise QueryError("DELETE needs a WHERE clause, so a mistake can't empty the table")
 
-        table = open_table(sheet, statement.table)
-        matching_rows = [row_number for row_number, _ in table.matching_rows(statement.where)]
-        delete_rows_bottom_up(table.worksheet, matching_rows)
+    table = open_table(sheet, statement.table)
+    matching_rows = [row_number for row_number, _ in table.matching_rows(statement.where)]
+    delete_rows_bottom_up(table.worksheet, matching_rows)
 
-        return "Deletion successful"
-    except Exception as e:
-        return f"Error executing DELETE: {str(e)}"
+    return len(matching_rows)
 
 
 def delete_rows_bottom_up(worksheet, row_numbers):

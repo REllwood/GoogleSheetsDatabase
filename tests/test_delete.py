@@ -1,6 +1,7 @@
 """DELETE must remove exactly the matching rows, however many there are."""
 import pytest
 
+from googlesheetsdb import ColumnNotFoundError
 from googlesheetsdb.delete_operations import _contiguous_runs
 
 
@@ -11,7 +12,7 @@ def teams(*rows):
 def test_deletes_every_matching_row_and_nothing_else(make_db):
     db, api = make_db(teams(("A", "RED"), ("B", "RED"), ("C", "BLUE"), ("D", "BLUE")))
 
-    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'RED'") == "Deletion successful"
+    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'RED'") == 2
 
     assert api.values("SHEET1") == [["NAME", "TEAM"], ["C", "BLUE"], ["D", "BLUE"]]
 
@@ -54,7 +55,7 @@ def test_header_row_is_never_deleted(make_db):
 def test_no_matches_sends_no_delete(make_db):
     db, api = make_db(teams(("A", "RED")))
 
-    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'GREEN'") == "Deletion successful"
+    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'GREEN'") == 0
 
     assert api.values("SHEET1") == [["NAME", "TEAM"], ["A", "RED"]]
     assert api.calls.count("batch_update") == 0
@@ -63,9 +64,8 @@ def test_no_matches_sends_no_delete(make_db):
 def test_unknown_column_is_an_error(make_db):
     db, api = make_db(teams(("A", "RED")))
 
-    assert db.execute_query("DELETE FROM SHEET1 WHERE COLOUR = 'RED'") == (
-        "Error executing DELETE: 'SHEET1' has no column 'COLOUR'. Columns: 'NAME', 'TEAM'"
-    )
+    with pytest.raises(ColumnNotFoundError, match="'SHEET1' has no column 'COLOUR'. Columns: 'NAME', 'TEAM'"):
+        db.execute_query("DELETE FROM SHEET1 WHERE COLOUR = 'RED'")
     assert len(api.values("SHEET1")) == 2
 
 
@@ -74,7 +74,7 @@ def test_can_delete_every_data_row_under_a_frozen_header(make_db):
     # frozen header, which Google Sheets refuses unless a blank row is kept.
     db, api = make_db(teams(("A", "RED"), ("B", "RED")), row_count=3, frozen_rows=1)
 
-    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'RED'") == "Deletion successful"
+    assert db.execute_query("DELETE FROM SHEET1 WHERE TEAM = 'RED'") == 2
 
     assert api.values("SHEET1") == [["NAME", "TEAM"]]
     assert api.sheet("SHEET1")["row_count"] == 2

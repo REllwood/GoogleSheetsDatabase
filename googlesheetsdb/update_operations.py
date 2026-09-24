@@ -1,5 +1,6 @@
 from gspread.utils import ValueInputOption, rowcol_to_a1
 
+from .errors import QueryError
 from .sheet_table import open_table
 
 
@@ -14,25 +15,29 @@ def execute_update(statement, sheet):
     - sheet (gspread.Spreadsheet): The Google Sheet instance.
 
     Returns:
-    - str: "Update successful". If the UPDATE query is missing a WHERE clause, it returns
-      "UPDATE query requires a WHERE clause". On failure, a description of the error.
+    - int: The number of rows that matched the WHERE clause and were updated.
+
+    Raises:
+    - QueryError: If the query has no WHERE clause, or sets a column twice.
+    - TableNotFoundError: If no worksheet has the table's name.
+    - ColumnNotFoundError: If a column isn't in the header row.
     """
-    try:
-        if statement.where is None:
-            return "UPDATE query requires a WHERE clause"
+    if statement.where is None:
+        raise QueryError(
+            "UPDATE needs a WHERE clause, so a mistake can't overwrite a whole column"
+        )
 
-        table = open_table(sheet, statement.table)
-        indexes = table.column_indexes([column for column, _ in statement.assignments])
-        values = ["" if value is None else value for _, value in statement.assignments]
+    table = open_table(sheet, statement.table)
+    indexes = table.column_indexes([column for column, _ in statement.assignments])
+    values = ["" if value is None else value for _, value in statement.assignments]
 
-        changes = [
-            {"range": rowcol_to_a1(row_number, index + 1), "values": [[value]]}
-            for row_number, _ in table.matching_rows(statement.where)
-            for index, value in zip(indexes, values)
-        ]
-        if changes:
-            table.worksheet.batch_update(changes, value_input_option=ValueInputOption.raw)
+    matching_rows = [row_number for row_number, _ in table.matching_rows(statement.where)]
+    changes = [
+        {"range": rowcol_to_a1(row_number, index + 1), "values": [[value]]}
+        for row_number in matching_rows
+        for index, value in zip(indexes, values)
+    ]
+    if changes:
+        table.worksheet.batch_update(changes, value_input_option=ValueInputOption.raw)
 
-        return "Update successful"
-    except Exception as e:
-        return f"Error executing UPDATE: {str(e)}"
+    return len(matching_rows)
