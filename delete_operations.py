@@ -1,6 +1,3 @@
-import gspread
-
-
 def execute_delete(query, sheet):
     """
      Executes a DELETE query on the provided Google Sheet.
@@ -33,7 +30,7 @@ def execute_delete(query, sheet):
 
             for cell in cell_list:
                 if cell.col == worksheet.find(where_column).col:
-                    worksheet.delete_row(cell.row)
+                    worksheet.delete_rows(cell.row)
 
             return "Deletion successful"
         else:

@@ -1,5 +1,3 @@
-import gspread
-
 def execute_select(query, sheet):
     """
     Executes a SELECT query on the provided Google Sheet.

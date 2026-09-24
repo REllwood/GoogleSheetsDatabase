@@ -1,0 +1,15 @@
+# Google credentials and tokens: never commit these
+credentials.json
+client_secret*.json
+authorized_user.json
+*service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
